@@ -1,0 +1,6 @@
+Prime Stockfish UI project
+Copyright 2026
+
+This project is an original UI/game shell. Third-party dependencies retain their own licenses.
+Stockfish is GPL-3.0; see the official Stockfish repository for its license and source:
+https://github.com/official-stockfish/Stockfish
