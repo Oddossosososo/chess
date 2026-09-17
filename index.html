@@ -16,7 +16,7 @@
 <main class="layout">
 <section class="card"><div id="board" class="board"></div></section>
 <aside class="card">
-<div class="status"><span class="pill" id="sidePill">WHITE • MAGNUS SIMULATION</span><h3 id="turn">Loading engines…</h3><div class="eval" id="eval">—</div><div class="bar"><div class="fill" id="fill"></div></div><div id="state">Starting Stockfish 19…</div></div>
+<div class="status"><span class="pill" id="sidePill">WHITE • MAGNUS SIMULATION</span><h3 id="turn">Loading engine…</h3><div class="eval" id="eval">—</div><div class="bar"><div class="fill" id="fill"></div></div><div id="state">Starting Stockfish 19…</div></div>
 <h3>Moves</h3><div id="moves" class="moves"></div>
 <div class="notice">This is an automated computer-vs-computer match. The Magnus side is a simulation and is not Magnus Carlsen or connected to him. Stockfish 19 is the real chess engine running in the browser.</div>
 </aside>
@@ -27,19 +27,35 @@
 'use strict';
 const game=new Chess();
 const boardEl=document.getElementById('board'),movesEl=document.getElementById('moves'),turnEl=document.getElementById('turn'),stateEl=document.getElementById('state'),evalEl=document.getElementById('eval'),fillEl=document.getElementById('fill'),sidePill=document.getElementById('sidePill');
-let flipped=false,paused=false,thinking=false,lastMove=null,engine=null,ready=false,matchToken=0;
+let flipped=false,paused=false,thinking=false,ready=false,engine=null,lastMove=null,matchToken=0;
 const icons={p:['♙','♟'],n:['♘','♞'],b:['♗','♝'],r:['♖','♜'],q:['♕','♛'],k:['♔','♚']};
 const files=['a','b','c','d','e','f','g','h'];
-function render(){boardEl.innerHTML='';const ranks=flipped?[1,2,3,4,5,6,7,8]:[8,7,6,5,4,3,2,1];const fs=flipped?files.slice().reverse():files;for(const r of ranks)for(const f of fs){const sq=f+r,b=game.get(sq),el=document.createElement('button');el.className='sq '+(((files.indexOf(f)+r)%2)?'dark':'light');if(lastMove&&(lastMove.from===sq||lastMove.to===sq))el.classList.add('last');if(b)el.innerHTML='<span class="piece">'+icons[b.type][b.color==='w'?0:1]+'</span>';boardEl.appendChild(el)}renderMoves();updateStatus();}
+function render(){boardEl.innerHTML='';const ranks=flipped?[1,2,3,4,5,6,7,8]:[8,7,6,5,4,3,2,1],fs=flipped?files.slice().reverse():files;for(const r of ranks)for(const f of fs){const sq=f+r,b=game.get(sq),el=document.createElement('button');el.className='sq '+(((files.indexOf(f)+r)%2)?'dark':'light');if(lastMove&&(lastMove.from===sq||lastMove.to===sq))el.classList.add('last');if(b)el.innerHTML='<span class="piece">'+icons[b.type][b.color==='w'?0:1]+'</span>';boardEl.appendChild(el)}renderMoves();updateStatus();}
 function renderMoves(){const h=game.history();let html='';for(let i=0;i<h.length;i+=2)html+='<div class="move"><span class="num">'+(i/2+1)+'.</span><span>'+h[i]+'</span><span>'+((h[i+1]||''))+'</span></div>';movesEl.innerHTML=html;movesEl.scrollTop=movesEl.scrollHeight;}
 function updateStatus(){if(game.game_over()){turnEl.textContent='Match finished';stateEl.textContent=game.in_checkmate()?'Checkmate — '+(game.turn()==='w'?'Stockfish':'Magnus simulation')+' wins':game.in_draw()?'Draw':'Game over';return}const white=game.turn()==='w';sidePill.textContent=(white?'WHITE • MAGNUS SIMULATION':'BLACK • STOCKFISH 19');turnEl.textContent=thinking?'Thinking…':(white?'Magnus is thinking':'Stockfish is thinking');stateEl.textContent=game.in_check()?'Check!':(white?'Magnus simulation to move':'Stockfish 19 to move');}
-function setEval(cp){if(typeof cp!=='number')return;const score=Math.max(-999,Math.min(999,cp))/100;evalEl.textContent=(score>=0?'+':'')+score.toFixed(2);const pct=Math.max(0,Math.min(100,50+score*7));fillEl.style.width=pct+'%';}
-function fenMoveToObject(s){const from=s.slice(0,2),to=s.slice(2,4);const promotion=s.length>4?s[4]:undefined;return {from,to,promotion};}
-function askEngine(fen,token,callback){if(!engine||!ready||token!==matchToken)return;let best=null;engine.onmessage=function(e){const line=typeof e.data==='string'?e.data:'';if(line.startsWith('info ')){const m=line.match(/score cp (-?\d+)/);if(m)setEval(game.turn()==='w'?Number(m[1]):-Number(m[1]));}if(line.startsWith('bestmove ')){best=line.split(/\s+/)[1];if(best&&best!=='(none)')callback(best);}};engine.postMessage('position fen '+fen);engine.postMessage('go depth 18');}
-function doEngineMove(){if(paused||thinking||game.game_over()||!ready)return;thinking=true;updateStatus();const token=matchToken;const fen=game.fen();askEngine(fen,token,(uci)=>{if(token!==matchToken)return;const legal=game.moves({verbose:true});let candidates=legal.filter(m=>m.from===uci.slice(0,2)&&m.to===uci.slice(2,4));if(!candidates.length)candidates=legal.filter(m=>m.from===uci.slice(0,2));if(!candidates.length){thinking=false;return}const m=candidates[0];game.move({from:m.from,to:m.to,promotion:uci[4]||'q'});lastMove={from:m.from,to:m.to};thinking=false;render();if(!game.game_over())setTimeout(doEngineMove,700);});}
-function startEngine(){try{engine=new Worker('https://cdn.jsdelivr.net/gh/nmrugg/stockfish.js@master/src/stockfish-19-lite-single.js');engine.onmessage=function(e){const line=typeof e.data==='string'?e.data:'';if(line==='uciok'){engine.postMessage('isready')}if(line==='readyok'){ready=true;stateEl.textContent='Engines ready — starting match';setTimeout(doEngineMove,700)}};engine.onerror=function(){stateEl.textContent='Stockfish failed to load. Refresh to retry.';turnEl.textContent='Engine error';thinking=false};engine.postMessage('uci');}catch(err){stateEl.textContent='Could not start Stockfish';}}
-function reset(){matchToken++;game.reset();lastMove=null;paused=false;thinking=false;ready=false;if(engine){try{engine.terminate()}catch(e){}}engine=null;document.getElementById('pause').textContent='Pause';evalEl.textContent='—';fillEl.style.width='50%';render();startEngine();}
-document.getElementById('new').onclick=reset;document.getElementById('pause').onclick=function(){paused=!paused;this.textContent=paused?'Resume':'Pause';if(!paused&&!thinking)doEngineMove();updateStatus()};document.getElementById('flip').onclick=function(){flipped=!flipped;render()};
+function setEval(cp){if(typeof cp!=='number')return;const score=Math.max(-999,Math.min(999,cp))/100;evalEl.textContent=(score>=0?'+':'')+score.toFixed(2);fillEl.style.width=Math.max(0,Math.min(100,50+score*7))+'%';}
+function startEngine(){
+  try{
+    // GitHub Pages cannot directly construct a Worker from a different origin.
+    // Use a tiny same-page Blob worker that imports the pure-JS Stockfish 19 build.
+    const code="importScripts('https://github.com/nmrugg/stockfish.js/releases/download/v19.0.0/stockfish-19-asm.js');";
+    const blob=new Blob([code],{type:'application/javascript'});
+    engine=new Worker(URL.createObjectURL(blob));
+    engine.onmessage=function(e){
+      const line=typeof e.data==='string'?e.data:'';
+      if(line==='uciok')engine.postMessage('isready');
+      else if(line==='readyok'){ready=true;stateEl.textContent='Engine ready — starting match';setTimeout(doEngineMove,600);}
+    };
+    engine.onerror=function(e){ready=false;thinking=false;turnEl.textContent='Engine error';stateEl.textContent='Stockfish could not start. Try refreshing the page.';console.error('Stockfish worker error',e);};
+    engine.postMessage('uci');
+  }catch(err){ready=false;stateEl.textContent='Could not start Stockfish';turnEl.textContent='Engine error';console.error(err);}
+}
+function askEngine(fen,skill,token,callback){if(!engine||!ready||token!==matchToken)return;let best=null;const handler=function(e){const line=typeof e.data==='string'?e.data:'';if(line.startsWith('info ')){const m=line.match(/score cp (-?\d+)/);if(m)setEval(game.turn()==='w'?Number(m[1]):-Number(m[1]));}if(line.startsWith('bestmove ')){best=line.split(/\s+/)[1];engine.removeEventListener('message',handler);if(best&&best!=='(none)')callback(best);}};engine.addEventListener('message',handler);engine.postMessage('setoption name Skill Level value '+skill);engine.postMessage('position fen '+fen);engine.postMessage('go depth '+(skill>=20?16:11));}
+function doEngineMove(){if(paused||thinking||game.game_over()||!ready)return;thinking=true;updateStatus();const token=matchToken,white=game.turn()==='w',skill=white?12:20;askEngine(game.fen(),skill,token,function(uci){if(token!==matchToken)return;const legal=game.moves({verbose:true});let m=legal.find(x=>x.from===uci.slice(0,2)&&x.to===uci.slice(2,4));if(!m)m=legal[0];if(!m){thinking=false;return}game.move({from:m.from,to:m.to,promotion:uci[4]||'q'});lastMove={from:m.from,to:m.to};thinking=false;render();if(!game.game_over())setTimeout(doEngineMove,500);});}
+function reset(){matchToken++;if(engine){try{engine.terminate()}catch(e){}}engine=null;game.reset();lastMove=null;paused=false;thinking=false;ready=false;document.getElementById('pause').textContent='Pause';evalEl.textContent='—';fillEl.style.width='50%';render();stateEl.textContent='Starting Stockfish 19…';startEngine();}
+document.getElementById('new').onclick=reset;
+document.getElementById('pause').onclick=function(){paused=!paused;this.textContent=paused?'Resume':'Pause';if(!paused&&!thinking)doEngineMove();updateStatus();};
+document.getElementById('flip').onclick=function(){flipped=!flipped;render();};
 render();startEngine();
 })();
 </script>
